@@ -85,17 +85,47 @@ reproduce_sanbox/
     - [x] result.go - 定义运行结果结构
     - [x] status.go - 定义状态枚举
     - [x] size.go - 实现内存大小处理
-  - [ ] 资源限制实现
-  - [ ] 文件访问控制
+  - [x] 资源限制实现
+    - [x] rlimit.go - 实现资源限制功能
+  - [x] 文件访问控制
+    - [x] filehandler/handle.go - 文件访问限制处理器
+    - [x] filehandler/fileset.go - 文件权限集合
+    - [x] filehandler/syscallcounter.go - 系统调用计数器
+
+- [ ] 第二阶段：进程控制与系统调用限制
+  - [x] ptrace 基础实现
+    - [x] context_linux.go - 基本结构和接口
+    - [x] context_linux_amd64.go - 架构特定实现
+    - [x] context_helper_linux.go - 内存读取功能
+      - [x] vmRead - 基础内存读取
+      - [x] vmReadStr - 字符串读取
+      - [x] hasNull - 辅助函数
+    - [x] 完备的测试用例
+      - [x] 基本功能测试
+      - [x] 边界条件测试
+      - [x] 内存对齐测试
+  - [ ] ptrace 高级功能
+    - [ ] 系统调用跟踪
+    - [ ] 进程状态监控
+    - [ ] 资源使用统计
+  - [ ] seccomp 过滤器
 
 ## 下一步计划
 
-1. 实现资源限制 (rlimit)
-   - 创建 rlimit 包
-   - 实现 CPU 时间限制
-   - 实现内存限制
-   - 实现堆栈限制
-   - 实现输出限制
+1. 完善 ptrace 高级功能
+   - 实现系统调用跟踪
+   - 添加进程状态监控
+   - 集成资源使用统计
+
+2. 开发 seccomp 过滤器
+   - 设计系统调用白名单
+   - 实现过滤规则
+   - 添加自定义规则支持
+
+3. 强化测试覆盖
+   - 添加更多边界条件测试
+   - 压力测试和性能测试
+   - 集成测试
 
 ## 注意事项
 
@@ -103,3 +133,4 @@ reproduce_sanbox/
 2. 所有英文注释需要替换为中文注释
 3. 保持相同的接口定义和功能实现
 4. 确保兼容性和性能表现一致
+5. 重点关注内存安全和边界检查
