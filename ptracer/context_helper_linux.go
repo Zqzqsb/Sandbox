@@ -7,62 +7,67 @@ import (
 	unix "golang.org/x/sys/unix"
 )
 
-// ptraceReadStr 使用 PTRACE_PEEKDATA 从目标进程内存中读取字符串
-// 参数：
-//   - pid: 目标进程的 ID
-//   - addr: 要读取的内存地址
-//   - buff: 用于存储读取数据的缓冲区
-// 返回：
-//   - error: 如果读取失败返回错误，成功返回 nil
-// 注意：
-//   - 使用 PtracePeekData 按字（word）读取数据
-//   - 目标进程必须被 ptrace 附加
-//   - buff 的大小决定了最大读取长度
-//   - 读取在遇到 null 字节(\0)时停止
+/* ptraceReadStr 使用 PTRACE_PEEKDATA 从目标进程内存中读取字符串
 
-/*
-	// ProcessVMReadv
-	一次读取：
-	[====== 4096 bytes ======]  // 一次系统调用
+ptraceReadStr 通过 PTRACE_PEEKDATA 从目标进程内存中读取字符串。它使用 ptrace
+系统调用来读取目标进程的内存数据。
 
-	// PTRACE_PEEKDATA
-	多次读取：
-	[4 bytes][4 bytes][4 bytes]...  // 多次系统调用 ptracePeekText
-*/
+实现细节：
+  1. 使用 PTRACE_PEEKDATA 读取目标进程的内存数据
+  2. 将读取的数据存储到缓冲区中
+
+参数：
+  - pid: 目标进程的 ID
+  - addr: 要读取的内存地址
+  - buff: 用于存储读取数据的缓冲区
+
+返回值：
+  - error: 如果读取失败返回错误，成功返回 nil
+
+注意事项：
+  1. 目标进程必须被 ptrace 附加
+  2. buff 的大小决定了最大读取长度
+  3. 读取在遇到 null 字节(\0)时停止 */
 
 func ptraceReadStr(pid int, addr uintptr, buff []byte) error {
 	_, err := syscall.PtracePeekData(pid, addr, buff)
 	return err
 }
 
-// processVMReadv 封装 process_vm_readv 系统调用，用于在进程间直接传输数据
-// 相比 ptrace，这是一种更高效的进程间内存读取方式
-//
-// 参数：
-//   - pid: 目标进程的 ID
-//   - localIov: 本地进程的内存向量数组，指定接收数据的缓冲区
-//   - remoteIov: 远程进程的内存向量数组，指定要读取的内存区域
-//   - flags: 控制标志位，当前必须为 0
-//
-// 返回：
-//   - r1: 成功读取的字节数
-//   - r2: 保留值（通常为0）
-//   - err: 系统调用错误码，0 表示成功
-//
-// 注意：
-//   - 需要 Linux 3.2+ 内核支持
-//   - 比 PTRACE_PEEKDATA 更高效，因为：
-//     1. 一次系统调用可以读取多个不连续的内存区域
-//     2. 不需要目标进程处于 ptrace-stop 状态
-//     3. 减少了上下文切换
-//
-// 系统调用格式：
-// ssize_t process_vm_readv(pid_t pid,
-//                         const struct iovec *local_iov,
-//                         unsigned long liovcnt,
-//                         const struct iovec *remote_iov,
-//                         unsigned long riovcnt,
-//                         unsigned long flags);
+/* processVMReadv 封装 process_vm_readv 系统调用，用于在进程间直接传输数据
+
+processVMReadv 是对 Linux process_vm_readv 系统调用的封装，提供了一种高效的
+进程间内存读取机制。相比传统的 ptrace 方式，它具有更好的性能和灵活性。
+
+系统调用格式：
+  ssize_t process_vm_readv(pid_t pid,
+                          const struct iovec *local_iov,
+                          unsigned long liovcnt,
+                          const struct iovec *remote_iov,
+                          unsigned long riovcnt,
+                          unsigned long flags);
+
+参数：
+  - pid: 目标进程的 ID
+  - localIov: 本地进程的内存向量数组，指定接收数据的缓冲区
+  - remoteIov: 远程进程的内存向量数组，指定要读取的内存区域
+  - flags: 控制标志位，当前必须为 0
+
+返回值：
+  - r1: 成功读取的字节数
+  - r2: 保留值（通常为0）
+  - err: 系统调用错误码，0 表示成功
+
+性能优势：
+  1. 一次系统调用可以读取多个不连续的内存区域
+  2. 不需要目标进程处于 ptrace-stop 状态
+  3. 减少了上下文切换的开销
+
+使用要求：
+  1. 需要 Linux 3.2+ 内核支持
+  2. 调用进程需要适当的权限
+  3. 目标进程必须存在且可访问
+  4. 避免跨页面边界读取 */
 
 func processVMReadv(pid int, localIov, remoteIov []unix.Iovec,
 	flags uintptr) (r1, r2 uintptr, err syscall.Errno) {
@@ -72,22 +77,28 @@ func processVMReadv(pid int, localIov, remoteIov []unix.Iovec,
 		flags)
 }
 
-// vmRead 使用 process_vm_readv 从目标进程内存中读取数据
-// 这是对 processVMReadv 的高层封装，简化了内存向量的创建和使用
-//
-// 参数：
-//   - pid: 目标进程的 ID
-//   - addr: 要读取的内存地址
-//   - buff: 用于存储读取数据的缓冲区
-//
-// 返回：
-//   - int: 实际读取的字节数
-//   - error: 如果读取失败返回错误，成功返回 nil
-//
-// 工作流程：
-//  1. 创建本地和远程内存向量（iovec）
-//  2. 调用 process_vm_readv 系统调用
-//  3. 处理返回值和错误
+/* vmRead 使用 process_vm_readv 从目标进程内存中读取数据
+
+vmRead 是对 processVMReadv 的高层封装，简化了内存向量的创建和使用。
+
+实现细节：
+  1. 创建本地和远程内存向量（iovec）
+  2. 调用 process_vm_readv 系统调用
+  3. 处理返回值和错误
+
+参数：
+  - pid: 目标进程的 ID
+  - addr: 要读取的内存地址
+  - buff: 用于存储读取数据的缓冲区
+
+返回值：
+  - int: 实际读取的字节数
+  - error: 如果读取失败返回错误，成功返回 nil
+
+注意事项：
+  1. buff 的大小决定了最大读取长度
+  2. 读取在遇到 null 字节(\0)时停止 */
+
 func vmRead(pid int, addr uintptr, buff []byte) (int, error) {
 	l := len(buff)
 	// 创建本地内存向量，指向接收缓冲区
@@ -102,35 +113,66 @@ func vmRead(pid int, addr uintptr, buff []byte) (int, error) {
 	return int(n), err
 }
 
-// getIovecs 创建 iovec 数组
+/* getIovecs 创建 iovec 数组
+
+getIovecs 创建一个 iovec 数组，用于指定内存读取的源和目的地址。
+
+实现细节：
+  1. 创建 iovec 结构体
+  2. 初始化 iovec 结构体的 Base 和 Len 字段
+
+参数：
+  - base: 内存地址的基址
+  - l: 内存长度
+
+返回值：
+  - []unix.Iovec: 创建的 iovec 数组 */
+
 func getIovecs(base *byte, l int) []unix.Iovec {
 	return []unix.Iovec{getIovec(base, l)}
 }
 
-// getIovec 创建单个 iovec
+/* getIovec 创建单个 iovec
+
+getIovec 创建一个单独的 iovec 结构体，用于指定内存读取的源和目的地址。
+
+实现细节：
+  1. 创建 iovec 结构体
+  2. 初始化 iovec 结构体的 Base 和 Len 字段
+
+参数：
+  - base: 内存地址的基址
+  - l: 内存长度
+
+返回值：
+  - unix.Iovec: 创建的 iovec 结构体 */
+
 func getIovec(base *byte, l int) unix.Iovec {
 	return unix.Iovec{Base: base, Len: uint64(l)}
 }
 
-// vmReadStr 使用 process_vm_readv 从目标进程内存中读取字符串
-// 该函数处理内存对齐问题，并按页大小分块读取数据
-//
-// 参数：
-//   - pid: 目标进程的 ID
-//   - addr: 要读取的内存地址
-//   - buff: 用于存储读取数据的缓冲区
-//
-// 返回：
-//   - error: 如果读取失败返回错误，成功返回 nil
-//
-// 工作原理：
-//   1. 处理内存对齐：计算到页边界的偏移
-//   2. 分块读取：按页大小读取数据
-//   3. 遇到以下情况停止：
-//      - 读取到 null 字节(\0)
-//      - 缓冲区已满
-//      - 发生错误
-//      - 读取返回 0（表示结束）
+/* vmReadStr 使用 process_vm_readv 从目标进程内存中读取字符串
+
+vmReadStr 通过 process_vm_readv 从目标进程读取以 null 结尾的字符串。它会
+分页读取数据以避免跨页面访问可能带来的问题。
+
+实现细节：
+  1. 按页面大小分块读取
+  2. 检测字符串结束符（null）
+  3. 处理内存对齐和边界
+
+参数：
+  - pid: 目标进程的ID
+  - addr: 字符串在目标进程中的地址
+  - buff: 用于存储读取数据的缓冲区
+
+返回值：
+  - error: 如果读取失败返回错误，成功返回 nil
+
+注意事项：
+  1. 字符串必须以 null 结尾
+  2. 避免跨页面读取
+  3. 处理读取长度限制 */
 
 func vmReadStr(pid int, addr uintptr, buff []byte) error {
 	// 处理未对齐的地址：计算到页边界的剩余字节数
@@ -168,7 +210,20 @@ func vmReadStr(pid int, addr uintptr, buff []byte) error {
 	return nil
 }
 
-// hasNull 检查缓冲区中是否包含 null 字符
+/* hasNull 检查缓冲区中是否包含 null 字符
+
+hasNull 检查缓冲区中是否包含 null 字符（\0）。
+
+实现细节：
+  1. 遍历缓冲区中的每个字节
+  2. 检测 null 字符
+
+参数：
+  - buff: 要检查的缓冲区
+
+返回值：
+  - bool: 如果缓冲区中包含 null 字符，则返回 true，否则返回 false */
+
 func hasNull(buff []byte) bool {
 	for _, v := range buff {
 		if v == 0 {
@@ -177,13 +232,3 @@ func hasNull(buff []byte) bool {
 	}
 	return false
 }
-
-// clen 返回 C 风格字符串的长度（到第一个 null 字符）
-// func clen(b []byte) int {
-// 	for i := 0; i < len(b); i++ {
-// 		if b[i] == 0 {
-// 			return i
-// 		}
-// 	}
-// 	return len(b)
-// }
