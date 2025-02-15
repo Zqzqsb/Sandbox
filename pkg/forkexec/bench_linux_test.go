@@ -29,8 +29,13 @@ var (
 func BenchmarkStdFork(b *testing.B) {
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			pid, err := syscall.ForkExec("/bin/echo", nil, &syscall.ProcAttr{
-				Env: []string{"PATH=/bin"},
+			pid, err := syscall.ForkExec("/usr/bin/true", []string{"true"}, &syscall.ProcAttr{
+				Env: []string{"PATH=/usr/bin:/bin"},
+				Files: []uintptr{
+					uintptr(syscall.Stdin),
+					uintptr(syscall.Stdout),
+					uintptr(syscall.Stderr),
+				},
 			})
 			if err != nil {
 				b.Fatal(err)
