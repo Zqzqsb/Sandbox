@@ -2,6 +2,34 @@
 
 GoJudgeSandbox 是一个高性能、安全的程序执行沙箱系统。
 
+
+## 核心模块测试
+
+```mermaid
+gantt
+    title 各操作耗时对比 (微秒)
+    dateFormat X
+    axisFormat %s
+
+    section 基本操作
+    标准 Fork           :0, 17
+    简单 Fork           :0, 120
+
+    section 单一命名空间
+    PID                :0, 118
+    用户               :0, 126
+    UTS                :0, 122
+    Cgroup             :0, 121
+    IPC                :0, 157
+    挂载               :0, 112
+    网络               :0, 296
+
+    section 组合操作
+    快速挂载+Pivot     :0, 227
+    完全命名空间隔离   :0, 378
+    完全隔离+Pivot     :0, 505
+```
+
 ## 系统架构图
 
 ```mermaid
@@ -149,35 +177,6 @@ graph LR
            S->>S: destroy cgroup
        end
    ```
-
-## 核心模块测试
-
-### `unshared clone + privot_root`
-
-```mermaid
-gantt
-    title 各操作耗时对比 (微秒)
-    dateFormat X
-    axisFormat %s
-
-    section 基本操作
-    标准 Fork           :0, 17
-    简单 Fork           :0, 120
-
-    section 单一命名空间
-    PID                :0, 118
-    用户               :0, 126
-    UTS                :0, 122
-    Cgroup             :0, 121
-    IPC                :0, 157
-    挂载               :0, 112
-    网络               :0, 296
-
-    section 组合操作
-    快速挂载+Pivot     :0, 227
-    完全命名空间隔离   :0, 378
-    完全隔离+Pivot     :0, 505
-```
 
 ## 致谢
 
