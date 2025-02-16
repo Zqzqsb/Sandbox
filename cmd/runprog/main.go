@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/criyle/go-sandbox/runner"
+	"github.com/zqzqsb/sandbox/runner"
 )
 
 const (

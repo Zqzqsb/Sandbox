@@ -1,6 +1,6 @@
 package config
 
-import "github.com/criyle/go-sandbox/runner/ptrace/filehandler"
+import "github.com/zqzqsb/sandbox/runner/ptrace/filehandler"
 
 // GetConf return file access check set, syscall counter, allow and traced syscall arrays and new args
 func GetConf(pType, workPath string, args, addRead, addWrite []string,
